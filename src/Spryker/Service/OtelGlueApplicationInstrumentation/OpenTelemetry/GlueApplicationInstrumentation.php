@@ -10,6 +10,7 @@ namespace Spryker\Service\OtelGlueApplicationInstrumentation\OpenTelemetry;
 use Exception;
 use OpenTelemetry\API\Trace\Propagation\TraceContextPropagator;
 use OpenTelemetry\API\Trace\Span;
+use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\Context\Context;
@@ -39,6 +40,21 @@ class GlueApplicationInstrumentation implements GlueApplicationInstrumentationIn
     protected const GLUE_TRACE_ID = 'glue_trace_id';
 
     /**
+     * @var string
+     */
+    protected const ERROR_CODE = 'error_code';
+
+    /**
+     * @var string
+     */
+    protected const ERROR_MESSAGE = 'error_message';
+
+    /**
+     * @var string
+     */
+    protected const ERROR_TEXT_PLACEHOLDER = 'Error: %s in %s on line %d';
+
+    /**
      * @param \Spryker\Zed\Opentelemetry\Business\Generator\Instrumentation\CachedInstrumentation $instrumentation
      * @param \Symfony\Component\HttpFoundation\Request $request
      *
@@ -52,7 +68,9 @@ class GlueApplicationInstrumentation implements GlueApplicationInstrumentationIn
             class: GlueBootstrap::class,
             function: static::METHOD_NAME,
             pre: static function ($instance, array $params, string $class, string $function, ?string $filename, ?int $lineno) use ($instrumentation, $request): void {
-                define('OTEL_GLUE_TRACE_ID', uuid_create());
+                if (!defined('OTEL_GLUE_TRACE_ID')) {
+                    define('OTEL_GLUE_TRACE_ID', uuid_create());
+                }
 
                 $input = [static::GLUE_TRACE_ID => OTEL_GLUE_TRACE_ID];
                 TraceContextPropagator::getInstance()->inject($input);
@@ -87,7 +105,7 @@ class GlueApplicationInstrumentation implements GlueApplicationInstrumentationIn
      *
      * @return \OpenTelemetry\API\Trace\Span
      */
-    protected static function handleError(ContextStorageScopeInterface $scope): Span
+    protected static function handleError(ContextStorageScopeInterface $scope): SpanInterface
     {
         $error = error_get_last();
 
@@ -100,13 +118,13 @@ class GlueApplicationInstrumentation implements GlueApplicationInstrumentationIn
         $scope->detach();
         $span = Span::fromContext($scope->context());
 
-        if ($exception) {
+        if (isset($exception)) {
             $span->recordException($exception);
         }
 
-        $span->setAttribute(static::ERROR_MESSAGE, $exception ? $exception->getMessage() : '');
-        $span->setAttribute(static::ERROR_CODE, $exception ? $exception->getCode() : '');
-        $span->setStatus($exception ? StatusCode::STATUS_ERROR : StatusCode::STATUS_OK);
+        $span->setAttribute(static::ERROR_MESSAGE, isset($exception) ? $exception->getMessage() : '');
+        $span->setAttribute(static::ERROR_CODE, isset($exception) ? $exception->getCode() : '');
+        $span->setStatus(isset($exception) ? StatusCode::STATUS_ERROR : StatusCode::STATUS_OK);
 
         $span->end();
 
