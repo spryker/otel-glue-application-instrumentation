@@ -91,6 +91,7 @@ class GlueApplicationInstrumentation implements GlueApplicationInstrumentationIn
                     ->setAttribute(TraceAttributes::CODE_LINENO, $lineno)
                     ->setAttribute(TraceAttributes::URL_QUERY, $request->getRequest()->getQueryString())
                     ->startSpan();
+                $span->activate();
 
                 Context::storage()->attach($span->storeInContext(Context::getCurrent()));
             },
