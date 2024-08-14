@@ -23,7 +23,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Throwable;
 use function OpenTelemetry\Instrumentation\hook;
 
-class GlueApplicationInstrumentation implements GlueApplicationInstrumentationInterface
+class GlueApplicationInstrumentation
 {
     /**
      * @var string
