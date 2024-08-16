@@ -17,8 +17,8 @@ use OpenTelemetry\Context\Context;
 use OpenTelemetry\Context\ContextStorageScopeInterface;
 use OpenTelemetry\SemConv\TraceAttributes;
 use Spryker\Glue\GlueApplication\Bootstrap\GlueBootstrap;
-use Spryker\Shared\Opentelemetry\Instrumentation\CachedInstrumentationInterface;
-use Spryker\Shared\Opentelemetry\Request\RequestProcessorInterface;
+use Spryker\Shared\Opentelemetry\Instrumentation\CachedInstrumentation;
+use Spryker\Shared\Opentelemetry\Request\RequestProcessor;
 use Symfony\Component\HttpFoundation\Request;
 use Throwable;
 use function OpenTelemetry\Instrumentation\hook;
@@ -56,15 +56,13 @@ class GlueApplicationInstrumentation
     protected const ERROR_TEXT_PLACEHOLDER = 'Error: %s in %s on line %d';
 
     /**
-     * @param \Spryker\Shared\Opentelemetry\Instrumentation\CachedInstrumentationInterface $instrumentation
-     * @param \Spryker\Shared\Opentelemetry\Request\RequestProcessorInterface $request
-     *
      * @return void
      */
-    public static function register(
-        CachedInstrumentationInterface $instrumentation,
-        RequestProcessorInterface $request
-    ): void {
+    public static function register(): void
+    {
+        $instrumentation = new CachedInstrumentation();
+        $request = new RequestProcessor();
+
         // phpcs:disable
         hook(
             class: GlueBootstrap::class,
