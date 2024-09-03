@@ -10,15 +10,18 @@ namespace Spryker\Service\OtelGlueApplicationInstrumentation\OpenTelemetry;
 use Exception;
 use OpenTelemetry\API\Trace\Propagation\TraceContextPropagator;
 use OpenTelemetry\API\Trace\Span;
-use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\Context\Context;
 use OpenTelemetry\Context\ContextStorageScopeInterface;
+use OpenTelemetry\SDK\Trace\ReadableSpanInterface;
 use OpenTelemetry\SemConv\TraceAttributes;
+use Pyz\Glue\GlueApplication\Bootstrap\GlueBackendApiBootstrap;
+use Pyz\Glue\GlueApplication\Bootstrap\GlueStorefrontApiBootstrap;
 use Spryker\Glue\GlueApplication\Bootstrap\GlueBootstrap;
 use Spryker\Shared\Opentelemetry\Instrumentation\CachedInstrumentation;
 use Spryker\Shared\Opentelemetry\Request\RequestProcessor;
+use Spryker\Zed\Opentelemetry\Business\Generator\SpanFilter\SamplerSpanFilter;
 use Symfony\Component\HttpFoundation\Request;
 use Throwable;
 use function OpenTelemetry\Instrumentation\hook;
@@ -60,15 +63,41 @@ class GlueApplicationInstrumentation
      */
     public static function register(): void
     {
-        $instrumentation = new CachedInstrumentation();
         $request = new RequestProcessor();
+        $glueApplications = [
+            GlueBootstrap::class => 'GLUE',
+        ];
 
+        if (class_exists(GlueStorefrontApiBootstrap::class)) {
+            $glueApplications[GlueStorefrontApiBootstrap::class] = 'GLUE_STOREFRONT';
+        }
+
+        if (class_exists(GlueBackendApiBootstrap::class)) {
+            $glueApplications[GlueBackendApiBootstrap::class] = 'GLUE_BACKEND';
+        }
+
+        foreach ($glueApplications as $className => $applicationName) {
+            static::registerHook($className, $applicationName, $request);
+        }
+    }
+
+    /**
+     * @param string $className
+     * @param string $applicationName
+     * @param \Spryker\Shared\Opentelemetry\Request\RequestProcessor $requestProcessor
+     * 
+     * @return void
+     */
+    protected static function registerHook(string $className, string $applicationName, RequestProcessor $requestProcessor): void
+    {
         // phpcs:disable
         hook(
-            class: GlueBootstrap::class,
+            class: $className,
             function: static::METHOD_NAME,
-            pre: static function ($instance, array $params, string $class, string $function, ?string $filename, ?int $lineno) use ($instrumentation, $request): void {
-                if ($instrumentation::getCachedInstrumentation() === null || $request->getRequest() === null) {
+            pre: static function ($instance, array $params, string $class, string $function, ?string $filename, ?int $lineno) use ($requestProcessor, $applicationName): void {
+                putenv(sprintf('OTEL_SERVICE_NAME=%s', $applicationName));
+                $instrumentation = CachedInstrumentation::getCachedInstrumentation();
+                if ($instrumentation === null || $requestProcessor->getRequest() === null) {
                     return;
                 }
 
@@ -79,15 +108,15 @@ class GlueApplicationInstrumentation
                 $input = [static::GLUE_TRACE_ID => OTEL_GLUE_TRACE_ID];
                 TraceContextPropagator::getInstance()->inject($input);
 
-                $span = $instrumentation::getCachedInstrumentation()
+                $span = $instrumentation
                     ->tracer()
-                    ->spanBuilder(static::formatSpanName($request->getRequest()))
+                    ->spanBuilder(static::formatSpanName($requestProcessor->getRequest()))
                     ->setSpanKind(SpanKind::KIND_SERVER)
                     ->setAttribute(TraceAttributes::CODE_FUNCTION, $function)
                     ->setAttribute(TraceAttributes::CODE_NAMESPACE, $class)
                     ->setAttribute(TraceAttributes::CODE_FILEPATH, $filename)
                     ->setAttribute(TraceAttributes::CODE_LINENO, $lineno)
-                    ->setAttribute(TraceAttributes::URL_QUERY, $request->getRequest()->getQueryString())
+                    ->setAttribute(TraceAttributes::URL_QUERY, $requestProcessor->getRequest()->getQueryString())
                     ->startSpan();
                 $span->activate();
 
@@ -100,7 +129,8 @@ class GlueApplicationInstrumentation
                     return;
                 }
 
-                static::handleError($scope);
+                $span = static::handleError($scope);
+                SamplerSpanFilter::filter($span, true);
             },
         );
         // phpcs:enable
@@ -109,9 +139,9 @@ class GlueApplicationInstrumentation
     /**
      * @param \OpenTelemetry\Context\ContextStorageScopeInterface $scope
      *
-     * @return \OpenTelemetry\API\Trace\SpanInterface
+     * @return \OpenTelemetry\SDK\Trace\ReadableSpanInterface
      */
-    protected static function handleError(ContextStorageScopeInterface $scope): SpanInterface
+    protected static function handleError(ContextStorageScopeInterface $scope): ReadableSpanInterface
     {
         $error = error_get_last();
         $exception = null;
@@ -133,8 +163,7 @@ class GlueApplicationInstrumentation
         $span->setAttribute(static::ERROR_CODE, $exception !== null ? $exception->getCode() : '');
         $span->setStatus($exception !== null ? StatusCode::STATUS_ERROR : StatusCode::STATUS_OK);
 
-        $span->end();
-
+        /** @var \OpenTelemetry\SDK\Trace\ReadableSpanInterface $span */
         return $span;
     }
 
