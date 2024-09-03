@@ -85,7 +85,7 @@ class GlueApplicationInstrumentation
      * @param string $className
      * @param string $applicationName
      * @param \Spryker\Shared\Opentelemetry\Request\RequestProcessor $requestProcessor
-     * 
+     *
      * @return void
      */
     protected static function registerHook(string $className, string $applicationName, RequestProcessor $requestProcessor): void
