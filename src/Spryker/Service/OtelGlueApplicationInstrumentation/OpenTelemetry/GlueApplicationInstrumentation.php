@@ -10,6 +10,7 @@ namespace Spryker\Service\OtelGlueApplicationInstrumentation\OpenTelemetry;
 use Exception;
 use OpenTelemetry\API\Trace\Propagation\TraceContextPropagator;
 use OpenTelemetry\API\Trace\Span;
+use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\Context\Context;
@@ -139,9 +140,9 @@ class GlueApplicationInstrumentation
     /**
      * @param \OpenTelemetry\Context\ContextStorageScopeInterface $scope
      *
-     * @return \OpenTelemetry\SDK\Trace\ReadableSpanInterface
+     * @return \OpenTelemetry\API\Trace\SpanInterface
      */
-    protected static function handleError(ContextStorageScopeInterface $scope): ReadableSpanInterface
+    protected static function handleError(ContextStorageScopeInterface $scope): SpanInterface
     {
         $error = error_get_last();
         $exception = null;
@@ -163,7 +164,6 @@ class GlueApplicationInstrumentation
         $span->setAttribute(static::ERROR_CODE, $exception !== null ? $exception->getCode() : '');
         $span->setStatus($exception !== null ? StatusCode::STATUS_ERROR : StatusCode::STATUS_OK);
 
-        /** @var \OpenTelemetry\SDK\Trace\ReadableSpanInterface $span */
         return $span;
     }
 
